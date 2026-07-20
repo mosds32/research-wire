@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Research Wire — AI Dispatch Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #12141b;
+    --ink-panel: #1b1e28;
+    --ink-panel-2: #232733;
+    --gold: #c9a227;
+    --gold-dim: #8a7127;
+    --text-light: #ece8de;
+    --text-muted: #848b9c;
+    --paper: #f3efe4;
+    --paper-line: #d9d2bd;
+    --red-stamp: #9c3b3b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text-light);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 100vh;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  /* ---------------- SIDEBAR ---------------- */
+  .sidebar {
+    background: var(--ink-panel);
+    border-right: 1px solid #2a2e3a;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .masthead {
+    border-bottom: 2px solid var(--gold);
+    padding-bottom: 16px;
+  }
+
+  .masthead .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+
+  .masthead h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 30px;
+    font-weight: 700;
+    margin: 6px 0 0;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+
+  .field-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  textarea#topic {
+    width: 100%;
+    background: var(--ink-panel-2);
+    border: 1px solid #33384a;
+    color: var(--text-light);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 4px;
+    resize: vertical;
+    min-height: 72px;
+    line-height: 1.4;
+  }
+
+  textarea#topic:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+
+  button#dispatch {
+    background: var(--gold);
+    color: #1a1a12;
+    border: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 13px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  button#dispatch:hover:not(:disabled) { background: #ddb636; }
+  button#dispatch:active:not(:disabled) { transform: translateY(1px); }
+  button#dispatch:disabled {
+    background: #3a3c3e;
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .status-line {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    min-height: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-muted);
+  }
+  .status-dot.live {
+    background: var(--gold);
+    animation: pulse 1.1s infinite ease-in-out;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .log-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+  }
+
+  .log-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid #2a2e3a;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+
+  .log-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    max-height: 320px;
+  }
+
+  .log-entry {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-light);
+    display: flex;
+    gap: 8px;
+    animation: fadein 0.3s ease;
+    line-height: 1.4;
+  }
+
+  .log-entry .marker { color: var(--gold); flex-shrink: 0; }
+
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .empty-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* ---------------- MAIN / PAPER ---------------- */
+  .main {
+    padding: 56px 64px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  @media (max-width: 900px) {
+    .main { padding: 28px 18px; }
+  }
+
+  .paper {
+    background: var(--paper);
+    color: #23241f;
+    width: 100%;
+    max-width: 720px;
+    padding: 52px 56px;
+    border-radius: 2px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
+    position: relative;
+    min-height: 500px;
+  }
+
+  .paper::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 4px;
+    background: linear-gradient(90deg, var(--gold), var(--gold-dim));
+  }
+
+  .dateline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7a7362;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--paper-line);
+    padding-bottom: 14px;
+    margin-bottom: 24px;
+  }
+
+  .report-title {
+    font-family: 'Fraunces', serif;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.15;
+    margin: 0 0 28px;
+  }
+
+  .report-body h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    font-weight: 600;
+    margin: 32px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--paper-line);
+  }
+
+  .report-body p {
+    font-size: 15px;
+    line-height: 1.7;
+    margin: 0 0 14px;
+    color: #2c2d27;
+  }
+
+  .report-body ul { margin: 0 0 16px; padding-left: 20px; }
+  .report-body li {
+    font-size: 15px;
+    line-height: 1.65;
+    margin-bottom: 8px;
+    color: #2c2d27;
+  }
+
+  .report-body a { color: var(--red-stamp); }
+
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 420px;
+    color: #9a927c;
+    gap: 10px;
+  }
+
+  .placeholder .glyph {
+    font-family: 'Fraunces', serif;
+    font-size: 44px;
+    color: var(--paper-line);
+  }
+
+  .placeholder p {
+    font-size: 14px;
+    max-width: 320px;
+    line-height: 1.5;
+  }
+
+  .stamp {
+    position: absolute;
+    top: 44px;
+    right: 48px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--red-stamp);
+    border: 1.5px solid var(--red-stamp);
+    padding: 4px 10px;
+    border-radius: 2px;
+    transform: rotate(4deg);
+    opacity: 0.85;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="masthead">
+      <span class="eyebrow">Custom AI Agent</span>
+      <h1>Research Wire</h1>
+    </div>
+
+    <div>
+      <span class="field-label">Topic to investigate</span>
+      <textarea id="topic" placeholder="e.g. Impact of AI on jobs in Pakistan"></textarea>
+    </div>
+
+    <button id="dispatch">Dispatch Agent</button>
+
+    <div class="status-line">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Awaiting instructions</span>
+    </div>
+
+    <div class="log-panel">
+      <div class="log-title">Search Log</div>
+      <div class="log-entries" id="logEntries">
+        <div class="empty-hint">No searches yet — dispatch a topic to begin.</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN / REPORT -->
+  <main class="main">
+    <div class="paper" id="paper">
+      <div class="placeholder" id="placeholder">
+        <div class="glyph">§</div>
+        <p>Enter a topic on the left and dispatch the agent. Its findings will be typeset here as a report.</p>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+const topicInput = document.getElementById('topic');
+const dispatchBtn = document.getElementById('dispatch');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const logEntries = document.getElementById('logEntries');
+const paper = document.getElementById('paper');
+
+let pollTimer = null;
+
+function setStatus(text, live) {
+  statusText.textContent = text;
+  statusDot.classList.toggle('live', !!live);
+}
+
+function renderLog(queries) {
+  if (!queries.length) return;
+  logEntries.innerHTML = queries.map((q, i) =>
+    `<div class="log-entry"><span class="marker">${String(i + 1).padStart(2, '0')}</span><span>${escapeHtml(q)}</span></div>`
+  ).join('');
+  logEntries.scrollTop = logEntries.scrollHeight;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Handles simple **bold** markdown inside a line, after escaping HTML.
+function inlineMd(str) {
+  const escaped = escapeHtml(str);
+  return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+// If the model repeats the topic as its own first line/heading, strip it —
+// we already render the topic as the report's H1 title.
+function stripLeadingTitle(topic, text) {
+  const lines = text.split('\n');
+  let i = 0;
+  while (i < lines.length && !lines[i].trim()) i++;
+
+  if (i < lines.length) {
+    const cleanLine = lines[i].trim().replace(/^#{1,3}\s*/, '').replace(/\*\*/g, '').trim();
+    if (cleanLine.toLowerCase() === topic.trim().toLowerCase()) {
+      i++;
+      while (i < lines.length && (!lines[i].trim() || /^-{3,}$/.test(lines[i].trim()))) i++;
+    }
+  }
+  return lines.slice(i).join('\n');
+}
+
+// Very small markdown-ish renderer: handles #/##/### headers, bold, and bullet lists.
+function renderReport(topic, text) {
+  text = stripLeadingTitle(topic, text);
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+
+  for (let raw of lines) {
+    const line = raw.trim();
+    if (!line) { if (inList) { html += '</ul>'; inList = false; } continue; }
+
+    if (/^#{1,3}\s/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      const clean = line.replace(/^#{1,3}\s/, '');
+      html += `<h2>${escapeHtml(clean)}</h2>`;
+    } else if (/^[-*]\s/.test(line)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${inlineMd(line.replace(/^[-*]\s/, ''))}</li>`;
+    } else if (/^\d+\.\s/.test(line)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${inlineMd(line.replace(/^\d+\.\s/, ''))}</li>`;
+    } else {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<p>${inlineMd(line)}</p>`;
+    }
+  }
+  if (inList) html += '</ul>';
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  paper.innerHTML = `
+    <div class="stamp">Transmitted</div>
+    <div class="dateline">
+      <span>Dispatch — ${dateStr}</span>
+      <span>Agent: gpt-oss-20b</span>
+    </div>
+    <h1 class="report-title">${escapeHtml(topic)}</h1>
+    <div class="report-body">${html}</div>
+  `;
+}
+
+async function dispatch() {
+  const topic = topicInput.value.trim();
+  if (!topic) { topicInput.focus(); return; }
+
+  dispatchBtn.disabled = true;
+  logEntries.innerHTML = '';
+  setStatus('Dispatching agent…', true);
+  paper.innerHTML = `<div class="placeholder"><div class="glyph">…</div><p>Agent is researching. This can take 20–60 seconds depending on the topic.</p></div>`;
+
+  try {
+    const res = await fetch('/api/research', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic })
+    });
+    const data = await res.json();
+    if (data.error) {
+      setStatus('Error: ' + data.error, false);
+      dispatchBtn.disabled = false;
+      return;
+    }
+    poll(data.job_id, topic);
+  } catch (err) {
+    setStatus('Network error — is the server running?', false);
+    dispatchBtn.disabled = false;
+  }
+}
+
+function poll(jobId, topic) {
+  if (pollTimer) clearInterval(pollTimer);
+  let failCount = 0;
+  const MAX_FAILS = 5; // tolerate a few dropped requests before giving up
+
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/research/${jobId}`);
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+      const job = await res.json();
+      failCount = 0; // reset on success
+
+      renderLog(job.log || []);
+
+      if (job.status === 'running' || job.status === 'queued') {
+        setStatus(job.log.length ? `Searching (${job.log.length})…` : 'Thinking…', true);
+      } else if (job.status === 'done') {
+        clearInterval(pollTimer);
+        setStatus('Report ready', false);
+        dispatchBtn.disabled = false;
+        renderReport(topic, job.report || '(no content)');
+      } else if (job.status === 'error') {
+        clearInterval(pollTimer);
+        setStatus('Error: ' + (job.error || 'unknown'), false);
+        dispatchBtn.disabled = false;
+      }
+    } catch (err) {
+      failCount++;
+      setStatus(`Reconnecting… (${failCount}/${MAX_FAILS})`, true);
+      if (failCount >= MAX_FAILS) {
+        clearInterval(pollTimer);
+        setStatus('Lost connection to server', false);
+        dispatchBtn.disabled = false;
+      }
+    }
+  }, 1200);
+}
+
+dispatchBtn.addEventListener('click', dispatch);
+topicInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) dispatch();
+});
+</script>
+
+</body>
+</html>
