@@ -68,6 +68,30 @@ def call_model(messages):
     return response
 
 
+def extract_text(content):
+    """
+    Normalize a message's content into a plain string.
+    Mistral sometimes returns content as a string, sometimes as a list of
+    content blocks (e.g. [{"type": "text", "text": "..."}]). Handle both,
+    so downstream .strip() calls never crash on a list.
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                parts.append(block.get("text", ""))
+            else:
+                parts.append(getattr(block, "text", "") or "")
+        return "".join(parts)
+    return str(content)
+
+
 # ---------------------------------------------------------------------
 # AGENT LOOP
 # ---------------------------------------------------------------------
@@ -109,7 +133,7 @@ def run_agent(topic: str, max_turns: int = 8, on_search=None):
 
         # No tool calls -> model is giving its final answer
         if not tool_calls:
-            content = choice.content
+            content = extract_text(choice.content)
             if content and content.strip():
                 return content.strip()
 
@@ -127,7 +151,7 @@ def run_agent(topic: str, max_turns: int = 8, on_search=None):
                 }
             )
             retry_response = call_model(messages)
-            retry_content = (retry_response.choices[0].message.content or "").strip()
+            retry_content = extract_text(retry_response.choices[0].message.content).strip()
             if retry_content:
                 return retry_content
 
