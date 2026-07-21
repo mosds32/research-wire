@@ -1,32 +1,16 @@
-"""
-Custom Research AI Agent (OpenRouter version)
-================================================
-Uses OpenRouter's free gpt-oss-20b model instead of Claude.
-Same agent loop pattern: model decides to search -> we run the search ->
-feed results back -> model repeats until it writes a final report.
-
-Requirements:
-    pip install requests ddgs --break-system-packages
-
-Setup (IMPORTANT - never hardcode your key in the script):
-    export OPENROUTER_API_KEY="your-key-here"
-
-Usage:
-    python ai_agent.py "impact of AI on education"
-"""
-
 import os
 import sys
 import json
-import requests
+from mistralai import Mistral
 from ddgs import DDGS
 from dotenv import load_dotenv
 
 load_dotenv()  # reads the .env file and loads variables into the environment
 
-API_KEY = os.environ.get("OPENROUTER_API_KEY")
-MODEL = "openai/gpt-oss-20b:free"
-URL = "https://openrouter.ai/api/v1/chat/completions"
+API_KEY = os.environ.get("MISTRAL_API_KEY")
+MODEL = "mistral-large-latest"  # or "mistral-small-latest" for a cheaper/faster option
+
+client = Mistral(api_key=API_KEY)
 
 
 # ---------------------------------------------------------------------
@@ -50,7 +34,7 @@ def web_search(query: str, max_results: int = 5):
     return results
 
 
-# OpenAI-style tool/function definition (OpenRouter follows this schema)
+# Mistral uses the same OpenAI-style tool schema
 TOOLS = [
     {
         "type": "function",
@@ -74,23 +58,14 @@ TOOLS = [
 
 
 def call_model(messages):
-    """Send a chat completion request to OpenRouter."""
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://localhost",
-        "X-Title": "Research Agent",
-    }
-    payload = {
-        "model": MODEL,
-        "messages": messages,
-        "tools": TOOLS,
-        "max_tokens": 2000,
-    }
-    response = requests.post(URL, headers=headers, json=payload, timeout=60)
-    if response.status_code != 200:
-        raise RuntimeError(f"Request failed ({response.status_code}): {response.text}")
-    return response.json()
+    """Send a chat completion request to the Mistral AI API."""
+    response = client.chat.complete(
+        model=MODEL,
+        messages=messages,
+        tools=TOOLS,
+        max_tokens=2000,
+    )
+    return response
 
 
 # ---------------------------------------------------------------------
@@ -119,24 +94,26 @@ def run_agent(topic: str, max_turns: int = 8, on_search=None):
     ]
 
     for turn in range(max_turns):
-        data = call_model(messages)
+        response = call_model(messages)
+        choice = response.choices[0].message
 
-        try:
-            choice = data["choices"][0]["message"]
-        except (KeyError, IndexError):
-            return f"Unexpected response format:\n{data}"
+        messages.append(
+            {
+                "role": "assistant",
+                "content": choice.content,
+                "tool_calls": choice.tool_calls,
+            }
+        )
 
-        messages.append(choice)
-
-        tool_calls = choice.get("tool_calls")
+        tool_calls = choice.tool_calls
 
         # No tool calls -> model is giving its final answer
         if not tool_calls:
-            content = choice.get("content")
+            content = choice.content
             if content and content.strip():
                 return content.strip()
 
-            # The free model sometimes stops without writing the report.
+            # The model sometimes stops without writing the report.
             # Give it one explicit nudge to produce the final text now.
             messages.append(
                 {
@@ -149,30 +126,25 @@ def run_agent(topic: str, max_turns: int = 8, on_search=None):
                     ),
                 }
             )
-            retry_data = call_model(messages)
-            try:
-                retry_choice = retry_data["choices"][0]["message"]
-                retry_content = retry_choice.get("content")
-                if retry_content and retry_content.strip():
-                    return retry_content.strip()
-            except (KeyError, IndexError):
-                pass
+            retry_response = call_model(messages)
+            retry_content = (retry_response.choices[0].message.content or "").strip()
+            if retry_content:
+                return retry_content
 
             return "(model returned empty content twice — try increasing max_tokens or rerunning)"
 
         # Otherwise, execute each requested tool call
         for tc in tool_calls:
-            fn_name = tc["function"]["name"]
+            fn_name = tc.function.name
 
             try:
-                args = json.loads(tc["function"]["arguments"])
+                args = json.loads(tc.function.arguments)
             except (json.JSONDecodeError, TypeError):
-                # The free model occasionally returns malformed arguments.
-                # Don't crash the whole job — just report it back to the model.
                 messages.append(
                     {
                         "role": "tool",
-                        "tool_call_id": tc["id"],
+                        "tool_call_id": tc.id,
+                        "name": fn_name,
                         "content": json.dumps(
                             {"error": "Malformed arguments, please retry the search with a clean query."}
                         ),
@@ -192,7 +164,8 @@ def run_agent(topic: str, max_turns: int = 8, on_search=None):
             messages.append(
                 {
                     "role": "tool",
-                    "tool_call_id": tc["id"],
+                    "tool_call_id": tc.id,
+                    "name": fn_name,
                     "content": json.dumps(results),
                 }
             )
@@ -206,10 +179,10 @@ def run_agent(topic: str, max_turns: int = 8, on_search=None):
 if __name__ == "__main__":
     if not API_KEY:
         raise SystemExit(
-            "Missing OPENROUTER_API_KEY. Set it is environment variable "
+            "Missing MISTRAL_API_KEY. Set it as an environment variable "
             "before running this script:\n"
-            "  export OPENROUTER_API_KEY='your-key-here'\n"
-            "Get a free key at https://openrouter.ai/keys"
+            "  export MISTRAL_API_KEY='your-key-here'\n"
+            "Get a key from console.mistral.ai → API Keys."
         )
 
     if len(sys.argv) < 2:
