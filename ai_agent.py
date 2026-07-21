@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from mistralai import Mistral
+from mistralai.client import Mistral
 from ddgs import DDGS
 from dotenv import load_dotenv
 

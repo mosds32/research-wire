@@ -3,4 +3,4 @@ requests
 python-dotenv
 gunicorn
 ddgs
-mistralai
+mistralai==2.7.0
